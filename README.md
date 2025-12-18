@@ -22,7 +22,7 @@ go run . -i input.txt
 go run . -d incoming
 ```
 Processes only `.txt` files in `incoming/` and writes sorted versions into a sibling directory:
-`incoming_sorted_leisa_eva_231ADB279`
+`incoming_sorted_Aysel_Abiyeva_231ADB279`
 
 ## Design notes
 

@@ -1,7 +1,7 @@
 package main
 
 /*
-Name: Leisa Eva
+Name: Aysel Abiyeva
 Student ID: 231ADB279
 Program: gosort - Concurrent Chunk Sorting
 */
@@ -20,13 +20,11 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"strconv"
+
 )
 
-// NOTE: Random range for -r mode:
-// Generates integers in the inclusive range [-1000, 1000].
-
 func main() {
-	// Exactly one mode must be selected.
 	rN := flag.Int("r", -1, "generate N random integers (N >= 10)")
 	inFile := flag.String("i", "", "read integers from input file (one per line)")
 	inDir := flag.String("d", "", "process a directory containing .txt files (each sorted independently)")
@@ -77,9 +75,7 @@ func usageAndExit(msg string) {
 	os.Exit(1)
 }
 
-// -----------------------------
-// Mode 1: -r (random)
-// -----------------------------
+// -r random
 
 func runRandom(n int) error {
 	if n < 10 {
@@ -109,9 +105,7 @@ func runRandom(n int) error {
 	return nil
 }
 
-// -----------------------------
-// Mode 2: -i (input file)
-// -----------------------------
+// -i input file
 
 func runInputFile(path string) error {
 	nums, err := readIntsFromFile(path)
@@ -143,9 +137,7 @@ func runInputFile(path string) error {
 	return nil
 }
 
-// -----------------------------
-// Mode 3: -d (directory)
-// -----------------------------
+// -d directory
 
 func runDirectory(dir string) error {
 	info, err := os.Stat(dir)
@@ -159,13 +151,10 @@ func runDirectory(dir string) error {
 		return fmt.Errorf("not a directory: %s", dir)
 	}
 
-	// Output directory: sibling of "dir"
 	parent := filepath.Dir(filepath.Clean(dir))
 
-	// Exact naming pattern required:
-	// incoming_sorted_<firstname>_<surname>_<studentID>
-	firstname := "leisa"
-	surname := "eva"
+	firstname := "Aysel"
+	surname := "Abiyeva"
 	studentID := "231ADB279"
 	outDirName := fmt.Sprintf("%s_sorted_%s_%s_%s", filepath.Base(filepath.Clean(dir)), firstname, surname, studentID)
 	outDir := filepath.Join(parent, outDirName)
@@ -206,16 +195,13 @@ func runDirectory(dir string) error {
 		}
 	}
 
-	// No per-file console output per spec; still helpful to print final directory once.
 	fmt.Println("Directory mode complete.")
 	fmt.Println("Output directory:", outDir)
 
 	return nil
 }
 
-// -----------------------------
-// Chunking logic
-// -----------------------------
+// chunking
 
 func splitIntoChunks(numbers []int) [][]int {
 	n := len(numbers)
@@ -225,13 +211,11 @@ func splitIntoChunks(numbers []int) [][]int {
 		numChunks = 4
 	}
 	if numChunks > n {
-		// In practice, assignment ensures n >= 10, so this only matters for tiny n.
 		numChunks = n
 	}
 
-	// Roughly equal sizes: difference at most 1.
 	base := n / numChunks
-	rem := n % numChunks // first rem chunks get one extra element
+	rem := n % numChunks 
 
 	chunks := make([][]int, 0, numChunks)
 	start := 0
@@ -249,9 +233,7 @@ func splitIntoChunks(numbers []int) [][]int {
 	return chunks
 }
 
-// -----------------------------
-// Concurrent sorting
-// -----------------------------
+// concurrent sorting
 
 func sortChunksConcurrently(chunks [][]int) [][]int {
 	var wg sync.WaitGroup
@@ -269,9 +251,7 @@ func sortChunksConcurrently(chunks [][]int) [][]int {
 	return chunks
 }
 
-// -----------------------------
-// Merge logic (k-way merge, no re-sort)
-// -----------------------------
+// merge logic
 
 type heapItem struct {
 	val      int
@@ -367,9 +347,7 @@ func mergeSortedChunks(chunks [][]int) []int {
 	return out
 }
 
-// -----------------------------
-// Helpers
-// -----------------------------
+//helpers
 
 func generateRandomNumbers(n int) []int {
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
@@ -393,44 +371,74 @@ func readIntsFromFile(path string) ([]int, error) {
 		if os.IsNotExist(err) {
 			return nil, fmt.Errorf("file not found: %s", path)
 		}
-		return nil, err
+		return nil, fmt.Errorf("cannot open file %s: %w", path, err)
 	}
 	defer f.Close()
 
-	var nums []int
 	sc := bufio.NewScanner(f)
+
+	// In case lines are very long (not expected here, but safe)
+	const maxCapacity = 1024 * 1024
+	buf := make([]byte, 0, 64*1024)
+	sc.Buffer(buf, maxCapacity)
+
+	nums := make([]int, 0, 64)
 	lineNo := 0
+
 	for sc.Scan() {
 		lineNo++
 		line := strings.TrimSpace(sc.Text())
-		if line == "" {
-			continue
+
+		// Remove UTF-8 BOM if it exists on the first line (common on Windows)
+		if lineNo == 1 {
+			line = strings.TrimPrefix(line, "\uFEFF")
+			line = strings.TrimSpace(line)
 		}
+
+		if line == "" {
+			continue // ignore empty lines
+		}
+
 		val, convErr := parseIntStrict(line)
 		if convErr != nil {
-			return nil, fmt.Errorf("invalid integer on line %d: %q", lineNo, line)
+			return nil, fmt.Errorf("file %s: invalid integer on line %d: %q", path, lineNo, line)
 		}
 		nums = append(nums, val)
 	}
+
 	if err := sc.Err(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("file %s: read error: %w", path, err)
 	}
+
 	return nums, nil
 }
 
+
 func parseIntStrict(s string) (int, error) {
-	// Reject trailing junk (e.g. "12abc") by scanning an extra token.
-	var v int
-	var extra string
-	n, err := fmt.Sscan(s, &v, &extra)
-	if err != nil {
-		return 0, err
+	s = strings.TrimSpace(s)
+	s = strings.TrimPrefix(s, "\uFEFF") // handle BOM (sometimes in first line)
+	if s == "" {
+		return 0, fmt.Errorf("empty")
 	}
-	if n != 1 {
-		return 0, errors.New("not a pure integer")
+
+	// Only allow optional leading +/- and then digits
+	start := 0
+	if s[0] == '+' || s[0] == '-' {
+		start = 1
+		if len(s) == 1 {
+			return 0, fmt.Errorf("sign without digits")
+		}
 	}
-	return v, nil
+
+	for i := start; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return 0, fmt.Errorf("non-digit character")
+		}
+	}
+
+	return strconv.Atoi(s)
 }
+
 
 func writeIntsToFile(path string, nums []int) error {
 	f, err := os.Create(path)
